@@ -1,0 +1,49 @@
+name: Build and test the launcher
+
+on: [push, pull_request]
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+    container:
+      image: "opensuse/tumbleweed"
+
+    steps:
+    - uses: actions/checkout@v1
+    - name: install dependencies
+      run: |
+        zypper --non-interactive addrepo https://download.opensuse.org/repositories/windows:/mingw:/win64/openSUSE_Tumbleweed/windows:mingw:win64.repo
+        zypper --gpg-auto-import-keys --non-interactive ref
+        zypper --non-interactive in mingw64-cross-binutils mingw64-cross-gcc-c++ mingw64-filesystem automake autoconf make
+    - name: configure
+      run: |
+        autoreconf -fi
+        rpm --eval "%{_mingw64_configure} --with-windmc=%{_mingw64_windmc} --with-windres=%{_mingw64_windres} --with-distro-id=openSUSE-Leap-15.1 --with-distro-name=\"openSUSE Leap 15.1\"" > build.sh
+        chmod +x build.sh
+        ./build.sh
+    - name: make
+      run: |
+        make -j $(nproc)
+        mv $(find . -name DistroLauncher.exe) .
+    - name: store the build result
+      uses: actions/upload-artifact@v1
+      with:
+          name: DistroLauncher
+          path: DistroLauncher.exe
+
+  # not working until https://github.com/actions/virtual-environments/issues/50 gets resolved
+  # test:
+  #   needs: build
+  #   strategy:
+  #     matrix:
+  #       os: ["windows-2019", "windows-2016"]
+  #   runs-on: "${{ matrix.os }}"
+  #   steps:
+  #     - name: Download the Distrolauncher
+  #       uses: actions/download-artifact@v1
+  #       with:
+  #         name: DistroLauncher
+  #     - name: Run the Distrolauncher
+  #       run: ./DistroLauncher/DistroLauncher.exe help
+  #       shell: bash
